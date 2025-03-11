@@ -9,3 +9,4 @@ This program serves to interpret, filter, search, and read the XLM database.
 Place the XML file and program (.exe) file in a common windows folder.
 Updates of the XML file, and a multilingual version are found here:
 https://islamawakened.net/the-full-downloadable-translation-database/
+![3-11-2025 1-03-27 PM](https://github.com/user-attachments/assets/646bb0bc-863b-4253-bbca-1567071c06ca)
