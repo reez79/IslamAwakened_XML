@@ -13,3 +13,5 @@ https://islamawakened.net/the-full-downloadable-translation-database/
 Preview:
 
 ![3-11-2025 1-03-27 PM](https://github.com/user-attachments/assets/646bb0bc-863b-4253-bbca-1567071c06ca)
+
+If you wish to help with this effort, please reach out to:  reez@hotmail.com
