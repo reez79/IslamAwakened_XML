@@ -79,8 +79,8 @@ class PreferencesManager:
             self.data = {
                 "selected_translations": ["Arabic", "Muhammad Asad"],
                 "font": "Arial",
-                "font_size": "13",
-                "last_reference": "1-114",
+                "font_size": "12",
+                "last_reference": "1",
                 "theme": "darkly",  # Internal name
                 "last_keyword": ""
             }
@@ -102,56 +102,62 @@ class PreferencesManager:
             json.dump(self.data, f)
 
 class QuranSearchApp:
+    def _get_color(self, index):
+        """Returns a color from a predefined set of readable colors."""
+        colors = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', 
+                 '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+        return colors[index % len(colors)]
+
     def __init__(self, root: Window):
         try:
             logging.debug("Initializing QuranSearchApp")
             self.root = root
             self.root.title("Quran Verse Explorer")
-    
+
             # Desired window size
             desired_width = 1400
             desired_height = 1050
-    
+
             # Get screen dimensions
             self.root.update_idletasks()
             screen_width = self.root.winfo_screenwidth()
             screen_height = self.root.winfo_screenheight()
-    
+
             # Account for taskbar/dock
             usable_height = screen_height - 100
-    
+
             # Check if desired size fits
             if desired_width > screen_width or desired_height > usable_height:
                 logging.debug(f"Screen too small ({screen_width}x{screen_height}), maximizing window")
-                self.root.state('zoomed')
+                self.root.state('normal')
             else:
                 logging.debug(f"Setting window to {desired_width}x{desired_height}")
                 self.root.geometry(f"{desired_width}x{desired_height}")
                 self.center_window()
-    
+
             self.root.minsize(800, 600)
             self.data_loader = DataLoader()
             self.prefs = PreferencesManager()
             self.prefs.load_preferences()
-    
+
             # Set initial theme
             self.style = Style()
             self.style.theme_use('flatly')
-    
+
             # Font settings
             self.available_fonts = sorted(list(tk.font.families()))
             self.current_font = tk.StringVar(value=self.prefs.data.get('font', 'Arial'))
-            self.current_font_size = tk.StringVar(value=self.prefs.data.get('font_size', '11'))
+            self.current_font_size = tk.StringVar(value=self.prefs.data.get('font_size', '12'))
             self.font_sizes = [str(size) for size in range(8, 25)]
-    
+
             # Search filter for translations
             self.filter_var = tk.StringVar()
             self.filter_var.trace_add('write', self.filter_translations)
-    
+
             # Verse reference and keyword search
             self.last_reference = tk.StringVar(value=self.prefs.data.get('last_reference', ''))
             self.keyword_var = tk.StringVar(value=self.prefs.data.get('last_keyword', ''))
-    
+
             # Theme selection with mapping
             self.theme_mapping = {
                 'Light': 'flatly',
@@ -167,21 +173,21 @@ class QuranSearchApp:
             default_display = next(key for key, value in self.theme_mapping.items() 
                                  if value == self.prefs.data.get('theme', 'darkly'))
             self.theme_var = tk.StringVar(value=default_display)
-    
+
             # Loading label
             self.loading_label = ttk.Label(self.root, text="Loading data, please wait...", bootstyle="info")
             self.loading_label.pack(expand=True)
-    
+
             # Start data loading in background
             threading.Thread(target=self.load_data, daemon=True).start()
-    
+
             # Bind window closing event
             self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
             logging.debug("Initialization complete")
         except Exception as e:
             logging.error(f"Error in QuranSearchApp.__init__: {str(e)}")
             raise
-    
+
     def center_window(self):
         self.root.update_idletasks()
         width = self.root.winfo_width()
@@ -273,12 +279,12 @@ class QuranSearchApp:
 
     def filter_translations(self, *args):
         search_text = self.filter_var.get().lower()
-        
+
         # Remove all checkbuttons from the grid
         for trans in self.data_loader.translations:
             cb = self.translation_checkbuttons[trans]
             cb.grid_remove()
-        
+
         # Re-grid only matching checkbuttons in sequence
         row = 0
         for trans in self.data_loader.translations:
@@ -286,7 +292,7 @@ class QuranSearchApp:
                 cb = self.translation_checkbuttons[trans]
                 cb.grid(row=row, column=0, sticky="w", padx=2, pady=0)
                 row += 1
-        
+
         # Update canvas scroll region
         self.canvas.configure(scrollregion=self.canvas.bbox("all"))
         self.canvas.update_idletasks()
@@ -333,6 +339,14 @@ class QuranSearchApp:
             # Filter Frame (Translations Search)
             self.filter_frame = ttk.Frame(self.left_frame)
             self.filter_frame.grid(row=0, column=0, columnspan=2, sticky="ew", padx=5, pady=5)
+            self.toggle_all_var = tk.BooleanVar(value=False)
+            self.toggle_all_cb = ttk.Checkbutton(
+                self.filter_frame,
+                text="Toggle All",
+                variable=self.toggle_all_var,
+                command=self.toggle_all_translations
+            )
+            self.toggle_all_cb.pack(side=tk.TOP, padx=5, pady=5) # Moved to top
             ttk.Label(self.filter_frame, text="Search:").pack(side=tk.LEFT, padx=5)
             self.filter_entry = ttk.Entry(self.filter_frame, textvariable=self.filter_var)
             self.filter_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
@@ -403,9 +417,17 @@ class QuranSearchApp:
             self.keyword_entry.bind('<Return>', self.show_verses)
             logging.debug("Top frame (search controls) packed")
 
-            # Font and theme controls
+            # Show titles checkbox and Font controls
             self.font_frame = ttk.Frame(self.search_frame)
             self.font_frame.pack(fill="x", padx=5, pady=2)
+            self.show_titles_var = tk.BooleanVar(value=False)
+            self.show_titles_cb = ttk.Checkbutton(
+                self.font_frame, 
+                text="Show titles",
+                variable=self.show_titles_var,
+                command=self.show_verses
+            )
+            self.show_titles_cb.pack(side="left", padx=5)
             ttk.Label(self.font_frame, text="Font:").pack(side="left", padx=5)
             self.font_combo = ttk.Combobox(
                 self.font_frame,
@@ -496,7 +518,7 @@ class QuranSearchApp:
     def page_down(self, event):
         self.result_text.yview_scroll(1, "pages")
         return "break"
-        
+
     def update_font(self, event=None):
         try:
             self.result_text.configure(
@@ -565,7 +587,9 @@ class QuranSearchApp:
         keyword = self.keyword_var.get().strip().lower()
         selected_translations = [trans for trans, var in self.translation_vars.items() if var.get()]
         if not selected_translations:
-            messagebox.showwarning("Warning", "Please select at least one translation.")
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, "Please select at least one translation to display verses.")
+            self.status_var.set("No translations selected")
             return
         try:
             surah_start, start_ayah, surah_end, end_ayah = self.parse_reference(ref)
@@ -597,14 +621,30 @@ class QuranSearchApp:
                             else:
                                 match = True
                             if match:
-                                surah_name = self.data_loader.surah_names.get(surah, ('', '', ''))
-                                self.result_text.insert(tk.END, f"Surah {surah} - {surah_name[0]} ({surah_name[2]}): Ayah {ayah}\n")
-                                self.result_text.insert(tk.END, "=" * 40 + "\n")
-                                for trans in selected_translations:
+                                # Show surah name at start of new surah
+                                if self.show_titles_var.get() and (verse_count == 0 or (int(ayah) == 1)):
+                                    surah_name = self.data_loader.surah_names.get(surah, ('', '', ''))
+                                    arabic_name = ''.join(surah_name[0])  # Reverse the Arabic text for proper RTL display
+                                    self.result_text.tag_configure("arabic", justify='right')  # Configure tag for Arabic text
+                                    self.result_text.insert(tk.END, f"\nSurah {surah} - ", "surah_title")
+                                    self.result_text.insert(tk.END, arabic_name, "arabic")  # Insert Arabic with RTL tag
+                                    self.result_text.insert(tk.END, f" ({surah_name[2]})\n", "surah_title")
+
+                                    # Show selected translators with their colors
+                                    for i, trans in enumerate(selected_translations):
+                                        color = f"color_{i}"
+                                        self.result_text.tag_configure(color, foreground=self._get_color(i))
+                                        self.result_text.insert(tk.END, f"{trans}\n", color)
+
+                                    self.result_text.insert(tk.END, "="*40 + "\n\n")
+
+                                for i, trans in enumerate(selected_translations):
                                     if trans in self.data_loader.verses[surah][ayah_str]:
+                                        color = f"color_{i}"
                                         text = self.data_loader.verses[surah][ayah_str][trans]
-                                        self.result_text.insert(tk.END, f"{trans}:\n{text}\n\n")
-                                self.result_text.insert(tk.END, "\n")
+                                        if self.show_titles_var.get():
+                                            self.result_text.insert(tk.END, f"[{ayah}] ", color)
+                                        self.result_text.insert(tk.END, f"{text}\n", color)
                                 verse_count += 1
             if verse_count == 0:
                 self.result_text.insert(tk.END, "No verses match the search criteria.\n")
@@ -614,6 +654,11 @@ class QuranSearchApp:
         except ValueError as e:
             messagebox.showerror("Error", str(e))
             self.status_var.set("Error in reference format")
+
+    def toggle_all_translations(self):
+        state = self.toggle_all_var.get()
+        for trans, var in self.translation_vars.items():
+            var.set(state)
 
     def on_closing(self):
         self.save_preferences()
