@@ -1076,36 +1076,6 @@ class Theme:
                 "scrollbar_bg": "#2e4f6b",
                 "scrollbar_trough": "#2e4d69"
             },
-            "Sandstone Echo": {
-                "bg": "#c2b280",
-                "fg": "#3c2f2f",
-                "selectbg": "#d9d2c4",
-                "button_bg": "#d0ceac",
-                "button_fg": "#3c2f2f",
-                "entry_bg": "#e6e4c6",
-                "scrollbar_bg": "#d0ceac",
-                "scrollbar_trough": "#c2b280"
-            },
-            "Deep Moss": {
-                "bg": "#1f2f27",
-                "fg": "#e6f0d9",
-                "selectbg": "#3a4e42",
-                "button_bg": "#2a3c33",
-                "button_fg": "#e6f0d9",
-                "entry_bg": "#263630",
-                "scrollbar_bg": "#2a3c33",
-                "scrollbar_trough": "#1f2f27"
-            },
-            "Onyx Shadow": {
-                "bg": "#0f0f0f",
-                "fg": "#e6e6e6",
-                "selectbg": "#2b2b2b",
-                "button_bg": "#1a1a1a",
-                "button_fg": "#e6e6e6",
-                "entry_bg": "#131313",
-                "scrollbar_bg": "#1a1a1a",
-                "scrollbar_trough": "#0f0f0f"
-            },
             "Pearl Glow": {
                 "bg": "#f0f8ff",
                 "fg": "#3c2f2f",
@@ -1182,7 +1152,9 @@ class DataLoader:
                     if ayah_num not in self.verses[surah_num]:
                         self.verses[surah_num][ayah_num] = {}
                     self.verses[surah_num][ayah_num][source] = text
-                    if source not in self.translations:
+                    if source == "Arabic" and "Arabic" not in self.translations:
+                        self.translations.insert(0, "Arabic")
+                    elif source and source not in self.translations:
                         self.translations.append(source)
                 finally:
                     elem.clear()
@@ -1273,6 +1245,8 @@ class PreferencesManager:
 
 class QuranSearchApp:
     def __init__(self, root: tk.Tk):
+        # Initialize flag to track successful loading
+        self.initialized = False
         self.root = root
         self.root.title("Quran Verse Explorer")
         self.theme = Theme()
@@ -1294,12 +1268,14 @@ class QuranSearchApp:
             icon_path = os.path.join(sys._MEIPASS, "quran.png")
         else:
             icon_path = os.path.join(base_path, "quran.png")
-        self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
-
+        try:
+            self.root.iconphoto(True, tk.PhotoImage(file=icon_path))
+        except tk.TclError as e:
+            logging.error(f"Failed to load window icon: {e}")
+            
         self.data_loader = DataLoader()
         self.prefs = PreferencesManager()
         self.prefs.load_preferences(self.theme)
-
         # Instance variables for GUI controls
         self.filter_var = tk.StringVar()
         self.filter_var.trace_add('write', self.filter_translations)
@@ -1321,6 +1297,7 @@ class QuranSearchApp:
 
         threading.Thread(target=self.load_data, daemon=True).start()
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        # Mark initialization as complete after load_data (handled in load_data)
 
     def center_window(self):
         """Centers the application window on the screen."""
@@ -1404,6 +1381,22 @@ class QuranSearchApp:
             self.notes_scrollbar.configure(style="Vertical.TScrollbar")
 
         self.canvas.configure(scrollregion=self.canvas.bbox("all") or (0, 0, 300, 400))
+        
+    def configure_tags(self):
+        """Configures tags for the result_text widget."""
+        colors = self.theme.get_colors()
+        self.result_text.tag_configure("spacing", spacing1=5)
+        self.result_text.tag_configure("border", borderwidth=1, relief="raised")
+        self.result_text.tag_configure("bold", font=(self.current_font.get(), int(self.current_font_size.get()), "bold"))
+        self.result_text.tag_configure("underline", underline=True)
+        self.result_text.tag_configure("highlight", foreground=colors['selectbg'])
+        self.result_text.tag_configure("center", justify="center")
+        arabic_font_name = "Noto Naskh Arabic" if "Noto Naskh Arabic" in tkfont.families() else "Arial"
+        self.arabic_font.configure(family=arabic_font_name, size=int(self.current_font_size.get()) + 12)
+        self.result_text.tag_configure("arabic_rtl", font=self.arabic_font)
+        self.result_text.tag_configure("arabic_space", spacing3=3)
+        self.result_text.tag_configure("english_space", spacing3=1)
+        self.result_text.tag_configure("header_space", spacing1=12)
     
     def create_gui(self):
         colors = self.theme.get_colors()
@@ -1485,7 +1478,7 @@ class QuranSearchApp:
                                      bg=colors['entry_bg'], fg=colors['fg'], insertbackground=colors['fg'])
         self.keyword_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=5)
         self.keyword_entry.bind("<Return>", self.show_verses)
-        tooltip_text = "Search Tips:\n\n" \
+        self.tooltip_text = "Search Tips:\n\n" \
                        "Pressing 'Enter' is equivalent to clicking 'Show Verses' \n" \
                        "All searches are CasE inSEnsiTIVe \n\n" \
                        "The order of terms doesn't matter: (crescent moons = moons crescent) \n" \
@@ -1512,14 +1505,15 @@ class QuranSearchApp:
                        " 8) Notice that 'hive' does not exist in Abdel Haleem's translation; he translated as 'houses'\n" \
                        " 9) Now enable 'Broad Reslts'\n" \
                        " 10) 27 additional translations are shown; all those containing the word 'hive'" 
-        self.keyword_tooltip = ToolTip(self.keyword_entry, tooltip_text)
-
+#        self.keyword_tooltip = ToolTip(self.keyword_entry, self.tooltip_text)
+#   used this tip on the splash screen (see: on_data_loaded)
         self.broad_search_cb = tk.Checkbutton(self.top_frame, text="Broad Search",
                                              variable=self.broad_search_var, command=self.show_verses,
                                              bg=colors['bg'], fg=colors['fg'], selectcolor=colors['selectbg'])
         self.broad_search_cb.pack(side=tk.LEFT, padx=5)
         self.broad_results_cb = tk.Checkbutton(self.top_frame, text="Broad Results",
                                               variable=self.broad_results_var, state="disabled",
+                                              command=self.show_verses,  # makes this checkbox act immediately
                                               bg=colors['bg'], fg=colors['fg'], selectcolor=colors['selectbg'])
         self.broad_results_cb.pack(side=tk.LEFT, padx=5)
         self.broad_search_var.trace_add('write', self.toggle_broad_results)
@@ -1572,12 +1566,16 @@ class QuranSearchApp:
         self.result_text = tk.Text(self.result_frame, wrap=tk.WORD,
                                   font=(self.current_font.get(), int(self.current_font_size.get())),
                                   bg=colors['entry_bg'], fg=colors['fg'], insertbackground=colors['fg'],
-                                  padx=14, pady=9)
+                                  padx=13, pady=5)
         self.result_scrollbar = ttk.Scrollbar(self.result_frame, orient="vertical",
                                              command=self.result_text.yview,
                                              style="Vertical.TScrollbar")
+        arabic_font_name = "Noto Naskh Arabic" if "Noto Naskh Arabic" in tkfont.families() else "Arial"
+        self.arabic_font = tkfont.Font(family=arabic_font_name, size=int(self.current_font_size.get()) + 12)
+        self.configure_tags()
+        
         self.result_text.configure(yscrollcommand=self.result_scrollbar.set)
-        self.result_text.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
+        self.result_text.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
         self.result_scrollbar.grid(row=0, column=1, sticky="ns")
 
         self.root.bind("<Prior>", lambda event: self.result_text.yview_scroll(-1, "pages"))
@@ -1834,6 +1832,8 @@ class QuranSearchApp:
             self.data_loader.parse_xml(xml_path)  # Parse main XML
             self.data_loader.load_notes()  # Load notes separately
             self.root.after(0, self.on_data_loaded)
+            # Mark initialization as complete
+            self.initialized = True
         except FileNotFoundError as e:
             self.root.after(0, lambda: messagebox.showerror("Error", f"File not found: {str(e)}"))
         except etree.LxmlError as e:
@@ -1848,13 +1848,14 @@ class QuranSearchApp:
             default_path = Path(xml_default_path)
             if default_path.exists():
                 return default_path
-            messagebox.showinfo("Select XML File", "XML file (ia_all.xml) not found in program folder.\nPress 'OK' to find its location.\nBypass this step next time by placing the XML file in the program folder (with the .exe)\nThe latest XML file may be downloaded from the IslamAwakened website.")
+            messagebox.showinfo("Select XML File", "XML file (ia_all.xml) not found in program folder.\nPress 'OK' to temporarily locate it elsewhere.\n\nBypass this step next time by placing the XML file in the program folder (alongside the program .exe)\nThe latest XML file can be downloaded from the IslamAwakened website.")
             file_path = filedialog.askopenfilename(
                 title="Select Quran XML File",
                 filetypes=[("XML files", "*.xml"), ("All files", "*.*")]
             )
             if not file_path:
-                messagebox.showerror("Error", "XML file not found.\nDownload it from IslamAwakened.com\nPlace it in program folder.\nApplication will now close.")
+                messagebox.showinfo("No File Selected", "No file selected. The application will now exit.")
+                self.root.destroy()  # Close Tkinter window
                 raise SystemExit("No XML file selected")
             return Path(file_path)
         except FileNotFoundError as e:
@@ -1865,13 +1866,27 @@ class QuranSearchApp:
             raise
 
     def on_data_loaded(self):
-        """Callback after data is loaded to set up the GUI."""
+        """Callback after data is loaded to set up the GUI and display styled welcome message."""
         self.loading_label.destroy()
         self.load_preferences()
         self.load_notes_into_memory()
         self.create_gui()
         self.apply_theme()
-        self.show_verses()
+        # Display styled welcome message
+        self.result_text.delete(1.0, tk.END)
+        # Center the entire message
+        self.result_text.insert(tk.END, "\n")  # Add top padding
+        self.result_text.insert(tk.END, "Bismillah  ---  Salamunalaykum", ("bold", "center"))
+        self.result_text.insert(tk.END, "\n\n")  # Space
+        self.result_text.insert(tk.END, "Click the  ", ("bold", "center"))
+        self.result_text.insert(tk.END, "Show Verses", ("border", "bold", "center"))
+        self.result_text.insert(tk.END, "  button above\n\n", ("bold", "center"))
+        self.result_text.insert(tk.END, "or scroll down to learn more about this program\n\n", "center")
+        self.result_text.insert(tk.END, "TIPS:")
+        self.result_text.insert(tk.END, "underlined", ("underline"))
+        self.result_text.insert(tk.END, "text")
+        self.result_text.insert(tk.END, self.tooltip_text) 
+        self.status_var.set("Ready - Click the 'Show Verses' button")
 
     def toggle_notes(self):
         colors = self.theme.get_colors()
@@ -1912,6 +1927,7 @@ class QuranSearchApp:
             self.result_text.configure(yscrollcommand=self.result_scrollbar.set)
             self.result_text.grid(row=0, column=0, sticky="nsew")
             self.result_scrollbar.grid(row=0, column=1, sticky="ns")
+            self.configure_tags()
             verse_frame.grid_rowconfigure(0, weight=1)
             verse_frame.grid_columnconfigure(0, weight=1)
             self.result_pane.add(verse_frame, minsize=400)
@@ -1964,7 +1980,7 @@ class QuranSearchApp:
             self.result_text.configure(yscrollcommand=self.result_scrollbar.set)
             self.result_text.grid(row=0, column=0, sticky="nsew", padx=5, pady=5)
             self.result_scrollbar.grid(row=0, column=1, sticky="ns")
-
+            self.configure_tags()
             self.root.bind("<Prior>", lambda event: self.result_text.yview_scroll(-1, "pages"))
             self.root.bind("<Next>", lambda event: self.result_text.yview_scroll(1, "pages"))
             self.show_verses()
@@ -2018,18 +2034,20 @@ class QuranSearchApp:
             self.translation_vars[trans] = tk.BooleanVar(value=trans in selected_translations)
 
     def save_preferences(self):
-        """Saves the current user preferences."""
-        selected = [trans for trans, var in self.translation_vars.items() if var.get()]
-        preferences = {
-            'selected_translations': selected,
-            'font': self.current_font.get(),
-            'font_size': self.current_font_size.get(),
-            'last_reference': self.ref_entry.get(),
-            'theme': self.theme_var.get(),
-            'last_keyword': self.keyword_var.get(),
-            'broad_search': self.broad_search_var.get(),
-            'broad_results': self.broad_results_var.get()
-        }
+        # Save user preferences using PreferencesManager only if initialized
+        if not getattr(self, 'initialized', False):
+            logging.info("Skipping preferences save due to failed initialization")
+            return
+        preferences = {}
+        preferences['selected_translations'] = [trans for trans, var in self.translation_vars.items() if var.get()]
+        preferences['broad_search'] = self.broad_search_var.get()
+        preferences['broad_results'] = self.broad_results_var.get()
+        preferences['notes_enabled'] = self.notes_var.get()
+        preferences['last_reference'] = self.last_reference.get()
+        preferences['font'] = self.current_font.get()
+        preferences['font_size'] = self.current_font_size.get()
+        preferences['theme'] = self.theme_var.get()
+        preferences['last_keyword'] = self.keyword_var.get()
         self.prefs.data = preferences
         self.prefs.save_preferences()
 
@@ -2078,13 +2096,17 @@ class QuranSearchApp:
             font_name = DEFAULT_FONT
             self.current_font.set(font_name)
         try:
-            self.result_text.configure(
-                font=(font_name, int(self.current_font_size.get()))
-            )
+            self.result_text.configure(font=(font_name, int(self.current_font_size.get())))
+            self.arabic_font.configure(size=int(self.current_font_size.get()) + 12)
+            self.result_text.tag_configure("arabic_rtl", font=self.arabic_font)
+            self.configure_tags()
         except tk.TclError:
             self.current_font.set(DEFAULT_FONT)
             self.current_font_size.set(DEFAULT_FONT_SIZE)
             self.result_text.configure(font=(DEFAULT_FONT, int(DEFAULT_FONT_SIZE)))
+            self.arabic_font.configure(family=DEFAULT_FONT, size=int(DEFAULT_FONT_SIZE) + 12)
+            self.result_text.tag_configure("arabic_rtl", font=self.arabic_font)
+            self.configure_tags()
 
     def parse_reference(self, ref: str) -> tuple[str, str, str, str]:
         """Parses the reference string into surah and ayah ranges."""
@@ -2226,7 +2248,9 @@ class QuranSearchApp:
         keyword = self.keyword_var.get().strip().lower()
         selected_translations = [trans for trans, var in self.translation_vars.items() if var.get()]
         if not selected_translations:
-            messagebox.showwarning("Warning", "Please select at least one translation.")
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, "Select at least one translation to display verses.")
+            self.status_var.set("No translations selected")
             return
         try:
             surah_start, start_ayah, surah_end, end_ayah = self.parse_reference(ref)
@@ -2250,12 +2274,9 @@ class QuranSearchApp:
 
             self.result_text.delete(1.0, tk.END)
             verse_count = 0
-            translation_count = len(selected_translations)
+            translation_count = len(selected_translations) - (1 if 'Arabic' in selected_translations else 0)
             start_surah = int(surah_start)
             end_surah = int(surah_end)
-
-            # Determine if it's a single verse
-#            is_single_verse = (surah_start == surah_end and start_ayah == end_ayah)
 
             # Initialize search_results: list if keyword search on range, None otherwise
             if keyword and not is_single_verse:
@@ -2263,13 +2284,10 @@ class QuranSearchApp:
             else:
                 self.search_results = None
 
-            if self.broad_search_var.get():
-                translations_to_check = self.data_loader.translations
-            else:
-                translations_to_check = selected_translations
+            # Track all displayed translations for accurate status message
+            all_displayed_translations = set()
 
-            additional_translations = set()
-
+            # Cache regex patterns
             patterns = []
             phrase_pattern = None
             if keyword:
@@ -2284,6 +2302,35 @@ class QuranSearchApp:
                         pattern_str = rf'\b{base}\w*'
                         patterns.append(re.compile(pattern_str, re.IGNORECASE))
 
+            # Precompute matching verses for broad search (for both single and range)
+            matching_verses = set()
+            translation_matches = {}  # { (surah, ayah): [trans] }
+            if keyword and self.broad_search_var.get():
+                for surah_num in range(start_surah, end_surah + 1):
+                    surah = str(surah_num)
+                    if surah in self.data_loader.verses:
+                        start = int(start_ayah) if surah_num == start_surah else 1
+                        end = int(end_ayah) if surah_num == end_surah else max(int(ayah) for ayah in self.data_loader.surahs[surah])
+                        for ayah in range(start, end + 1):
+                            ayah_str = str(ayah)
+                            if ayah_str in self.data_loader.verses[surah]:
+                                for trans in self.data_loader.translations:
+                                    if trans in self.data_loader.verses[surah][ayah_str]:
+                                        text = self.data_loader.verses[surah][ayah_str][trans]
+                                        match = False
+                                        if phrase_pattern:
+                                            if phrase_pattern.search(text):
+                                                match = True
+                                        elif patterns:
+                                            if all(pattern.search(text) for pattern in patterns):
+                                                match = True
+                                        if match:
+                                            matching_verses.add((surah, ayah_str))
+                                            if (surah, ayah_str) not in translation_matches:
+                                                translation_matches[(surah, ayah_str)] = []
+                                            translation_matches[(surah, ayah_str)].append(trans)
+
+            # Process and display verses
             for surah_num in range(start_surah, end_surah + 1):
                 surah = str(surah_num)
                 if surah in self.data_loader.verses:
@@ -2293,52 +2340,72 @@ class QuranSearchApp:
                         ayah_str = str(ayah)
                         if ayah_str in self.data_loader.verses[surah]:
                             matching_translations = []
-                            # Single verse: always display
-                            if is_single_verse:
+                            # Determine if the verse should be displayed
+                            if is_single_verse and self.notes_var.get():
+                                # Single verse with Notes active: always display
                                 match = True
                             elif keyword:
-                                match = False
-                                for trans in translations_to_check:
-                                    if trans in self.data_loader.verses[surah][ayah_str]:
-                                        text = self.data_loader.verses[surah][ayah_str][trans]
-                                        if phrase_pattern:
-                                            if phrase_pattern.search(text):
-                                                match = True
-                                                matching_translations.append(trans)
-                                        elif patterns:
-                                            if all(pattern.search(text) for pattern in patterns):
-                                                match = True
-                                                matching_translations.append(trans)
+                                # Keyword provided: check for a match
+                                if self.broad_search_var.get():
+                                    match = (surah, ayah_str) in matching_verses
+                                    if match:
+                                        matching_translations = translation_matches.get((surah, ayah_str), [])
+                                else:
+                                    match = False
+                                    for trans in selected_translations:
+                                        if trans in self.data_loader.verses[surah][ayah_str]:
+                                            text = self.data_loader.verses[surah][ayah_str][trans]
+                                            if phrase_pattern:
+                                                if phrase_pattern.search(text):
+                                                    match = True
+                                                    matching_translations.append(trans)
+                                            elif patterns:
+                                                if all(pattern.search(text) for pattern in patterns):
+                                                    match = True
+                                                    matching_translations.append(trans)
                             else:
+                                # No keyword: display the verse
                                 match = True
 
+                            # Process and display the verse if it matches
+                            has_content = False
                             if match:
-                                # Store result if it's a keyword search over a range
+                                # Store result for range keyword searches
                                 if keyword and not is_single_verse:
                                     self.search_results.append(f"{surah}.{ayah}")
                                 surah_name = self.data_loader.surah_names.get(surah, ('', '', ''))
-                                verse_text = f"Surah {surah} - {surah_name[0]} ({surah_name[2]}): Ayah {ayah}\n"
-                                verse_text += "=" * 40 + "\n"
-                                has_content = False
-
-                                display_translations = selected_translations.copy()
-                                if self.broad_search_var.get() and self.broad_results_var.get():
-                                    for trans in matching_translations:
-                                        if trans not in display_translations:
-                                            display_translations.append(trans)
-                                    additional_translations.update([trans for trans in matching_translations 
-                                                                  if trans not in selected_translations])
-
+                                self.result_text.insert(tk.END, f"Surah {surah} - {surah_name[0]} ({surah_name[2]}): Ayah {ayah}\n", "header_space")
+#                                self.result_text.insert(tk.END, f"Surah {surah} - {surah_name[0]} ({surah_name[2]}): Ayah {ayah}\n{'=' * 40}\n", "header_space")  # Insert header first
+                                # Build display_translations without duplicates
+                                display_translations = []
+                                if 'Arabic' in selected_translations:
+                                    display_translations.append('Arabic')
+                                if 'User Notes' in selected_translations:
+                                    display_translations.append('User Notes')
+                                display_translations.extend([trans for trans in selected_translations if trans not in display_translations])
+                                added_spacing = "\n" if "Arabic" not in display_translations else ""
+                                self.result_text.insert(tk.END, f"{'=' * 40}\n{added_spacing}")
+                                if self.broad_search_var.get() and self.broad_results_var.get() and not is_single_verse:
+                                    display_translations.extend([trans for trans in matching_translations if trans not in display_translations])
+                                # Add translation text
                                 for trans in display_translations:
                                     if trans in self.data_loader.verses[surah][ayah_str]:
+                                        if trans == "User Notes" and not self.data_loader.verses[surah][ayah_str][trans].strip(): continue  # Skip empty User Notes
                                         text = self.data_loader.verses[surah][ayah_str][trans]
-                                        verse_text += f"{trans}:\n{text}\n\n"
+                                        tags = ("arabic_rtl", "arabic_space") if trans == "Arabic" else ("english_space",) if trans != "User Notes" else ()
+#                                        tags = ("arabic_rtl", "arabic_space") if trans == "Arabic" else ("english_space",)
+                                        label = "" if trans == "Arabic" else f"{trans}:\n"  # Skip printing "Arabic" label, it's obvious right?
+                                        if trans == "Arabic":
+                                            self.result_text.insert(tk.END, f"{label}{text}", tags)  # Insert verse text: \n for new line but no extra spacing
+                                            self.result_text.insert(tk.END, "\n\n", "english_space")  # blank line with default size
+                                        else:
+                                            self.result_text.insert(tk.END, f"{label}{text}\n\n", tags)  # Insert verse text: \n\n extra line for spacing                                               
                                         has_content = True
-
+                                        all_displayed_translations.add(trans)
+                                # Display verse if it has content
                                 if has_content:
-                                    self.result_text.insert(tk.END, verse_text)
                                     verse_count += 1
-
+                        
             # Update last_ref for single verse
             self.last_ref = f"{surah_start}.{start_ayah}" if is_single_verse else None
 
@@ -2348,13 +2415,14 @@ class QuranSearchApp:
                 if self.last_ref in self.notes:
                     self.notes_text.insert("1.0", self.notes[self.last_ref])
 
+
             if verse_count == 0:
                 self.result_text.insert(tk.END, "No verses match the search criteria.\n")
                 self.status_var.set("No verses match the search criteria")
             else:
                 verse_label = "verse" if verse_count == 1 else "verses"
-                if self.broad_search_var.get() and self.broad_results_var.get() and additional_translations:
-                    extra_count = len(additional_translations)
+                if self.broad_search_var.get() and self.broad_results_var.get():
+                    extra_count = len(all_displayed_translations - set(selected_translations))
                     total_trans = translation_count + extra_count
                     trans_label = "translation" if total_trans == 1 else "translations"
                     self.status_var.set(f"Found {verse_count} {verse_label} in {translation_count}+{extra_count} {trans_label}")
@@ -2362,22 +2430,31 @@ class QuranSearchApp:
                     trans_label = "translation" if translation_count == 1 else "translations"
                     self.status_var.set(f"Found {verse_count} {verse_label} in {translation_count} {trans_label}")
         except ValueError as e:
-            messagebox.showerror("Error", str(e))
-            self.status_var.set("Error in reference format")
-            self.last_reference.set("1-114")  # fix the mistake to something useful
-            self.ref_entry.update()  # reflects change in GUI
-            self.show_verses() # and call for the output of 1-114
-        
+#            messagebox.showerror("Error", str(e))
+            self.result_text.delete(1.0, tk.END)
+            self.result_text.insert(tk.END, f"'{self.ref_entry.get().strip()}' is an invalid verse reference format\n\nPress 'Enter' now to accept '1-114'\n\nOr try:\n- Any surah (e.g., 1)\n- A specific verse (e.g., 2.225)\n- Range of surahs (e.g., 3-4)\n- Specific range (e.g., 1.6-1.7)\n\nUse 1-114 while searching the entire Quran")
+            self.status_var.set("invalid range - reset to 1-114 - press 'Enter'")
+            self.last_reference.set("1-114")
+            self.ref_entry.update()
+#            self.show_verses()
+
     def on_closing(self):
-        # Save current note if notes pane is active
-        if self.notes_var.get() and hasattr(self, 'notes_text') and self.notes_text and self.last_ref:
-            note = self.notes_text.get("1.0", tk.END).strip()
-            if note:
-                self.notes[self.last_ref] = note
-            elif self.last_ref in self.notes:
-                del self.notes[self.last_ref]
-        self.save_notes()  # Save all notes to notes.xml
-        self.save_preferences()
+        # Handle window closing event
+        try:
+            if getattr(self, 'initialized', False):
+                # Save current note if notes pane is active
+                if self.notes_var.get() and hasattr(self, 'notes_text') and self.notes_text and self.last_ref:
+                    note = self.notes_text.get("1.0", tk.END).strip()
+                    if note:
+                        self.notes[self.last_ref] = note
+                    elif self.last_ref in self.notes:
+                        del self.notes[self.last_ref]
+                self.save_notes()  # Save all notes to notes.xml
+                self.save_preferences()
+            else:
+                logging.info("Skipping save on close due to failed initialization")
+        except Exception as e:
+            logging.warning(f"Failed to save during shutdown: {str(e)}")
         self.root.destroy()
 
 def main():
