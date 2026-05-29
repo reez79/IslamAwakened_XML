@@ -1882,9 +1882,9 @@ class QuranSearchApp:
         self.result_text.insert(tk.END, "Show Verses", ("border", "bold", "center"))
         self.result_text.insert(tk.END, "  button above\n\n", ("bold", "center"))
         self.result_text.insert(tk.END, "or scroll down to learn more about this program\n\n", "center")
-        self.result_text.insert(tk.END, "TIPS:")
-        self.result_text.insert(tk.END, "underlined", ("underline"))
-        self.result_text.insert(tk.END, "text")
+#        self.result_text.insert(tk.END, "TIPS:")
+#        self.result_text.insert(tk.END, "underlined", ("underline"))
+#        self.result_text.insert(tk.END, "text")
         self.result_text.insert(tk.END, self.tooltip_text) 
         self.status_var.set("Ready - Click the 'Show Verses' button")
 
