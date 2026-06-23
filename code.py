@@ -1295,7 +1295,7 @@ class QuranView:
         
         self.main_container.sash_place(0, DEFAULT_SASH_POSITION, 0)
 
-# these tooltips work
+# tooltips
 
         # Bind Tooltips to Left Frame Preset Buttons
         ToolTip(self.save_preset_btn, "Save your currently selected translations", self.tooltips_var)
@@ -1309,8 +1309,6 @@ class QuranView:
         ToolTip(self.broad_results_cb, "Include all translations containing the search query irrespective of selected translation(s)", self.tooltips_var)
         ToolTip(self.notes_checkbox, "Show or hide the User Notes window pane\n\nTIP: After making your first note, a file will be saved to the program folder named 'Notes.xml'.  On the next program launch, select the box 'User Notes' at the top of the list of translators\n\nNote-taking is limited to 1 verse at a time", self.tooltips_var)
         ToolTip(self.tooltips_checkbox, "Enable/Disable floating tooltips (like this one)", self.tooltips_var)
-
-# these tooltips crash the program
         # Filter
         ToolTip(self.filter_entry, "Type here to filter the below translators list\n\nTIP:\nAfter typing...\nKeyboard 'TAB' to highlight a translation\n(or Shift-Tab to move up)\n& 'Spacebar' to select/deselect", self.tooltips_var)
         # Navigation
